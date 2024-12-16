@@ -7,62 +7,138 @@ import io.ktor.server.routing.*
 import io.ktor.server.response.*
 import io.ktor.http.*
 import io.ktor.server.request.*
+import kotlinx.html.*
 
-// Definição da classe Books
-@kotlinx.serialization.Serializable
-data class Book(s
+// Definição da classe Book
+data class Book(
     val id: Int,
     val title: String,
     val author: String,
     val genre: String
 )
 
-// Dados temporários (em memória)
+// Lista de livros inicial
 val books = mutableListOf(
-    Books(1, "Kotlin in Action", "Dmitry Jemerov", "Programming"),
-    Books(2, "Clean Code", "Robert C. Martin", "Programming")
+    Book(1, "Kotlin in Action", "Dmitry Jemerov", "Programming"),
+    Book(2, "Clean Code", "Robert C. Martin", "Programming")
 )
 
 fun main() {
-    embeddedServer(Netty, port = 8080) {
+    embeddedServer(Netty, port = 8081) {
         install(ContentNegotiation) {
-            json() // Configura o Ktor para usar JSON como formato de resposta
+            json()
         }
 
         routing {
+            // Página inicial com botões
             get("/") {
-                call.respondText("Welcome to the Bookstore API!")
+                call.respondHtml {
+                    head {
+                        title { +"Bookstore" }
+                    }
+                    body {
+                        h1 { +"Welcome to the Bookstore API!" }
+                        p { +"Explore the collection or add new books." }
+
+                        // Botão para listar os livros
+                        form(action = "/books-page", method = FormMethod.get) {
+                            button { +"View Books" }
+                        }
+
+                        // Botão para adicionar um novo livro
+                        form(action = "/add-book", method = FormMethod.get) {
+                            button { +"Add a New Book" }
+                        }
+                    }
+                }
             }
 
-            // Endpoint para listar livros
+            // Rota para listar os livros (HTML)
+            get("/books-page") {
+                call.respondHtml {
+                    head {
+                        title { +"Book List" }
+                    }
+                    body {
+                        h1 { +"Book List" }
+                        ul {
+                            books.forEach { book ->
+                                li { +"${book.title} by ${book.author} (Genre: ${book.genre})" }
+                            }
+                        }
+                        a(href = "/") { +"Back to Home" }
+                    }
+                }
+            }
+
+            // Rota para adicionar um novo livro (HTML)
+            get("/add-book") {
+                call.respondHtml {
+                    head {
+                        title { +"Add a New Book" }
+                    }
+                    body {
+                        h1 { +"Add a New Book" }
+                        form(action = "/books", method = FormMethod.post) {
+                            p {
+                                label { +"ID: " }
+                                textInput(name = "id") { required = true }
+                            }
+                            p {
+                                label { +"Title: " }
+                                textInput(name = "title") { required = true }
+                            }
+                            p {
+                                label { +"Author: " }
+                                textInput(name = "author") { required = true }
+                            }
+                            p {
+                                label { +"Genre: " }
+                                textInput(name = "genre") { required = true }
+                            }
+                            button(type = ButtonType.submit) { +"Add Book" }
+                        }
+                        a(href = "/") { +"Back to Home" }
+                    }
+                }
+            }
+
+            // Rota para listar os livros em formato JSON
             get("/books") {
-                call.respond(HttpStatusCode.OK, books) // Retorna a lista de livros
+                call.respond(HttpStatusCode.OK, books)
             }
 
-            // Endpoint para adicionar um livro
+            // Rota para adicionar um livro
             post("/books") {
-                val book = try {
-                    call.receive<Books>() // Recebe o JSON e desserializa para um objeto Books
-                } catch (e: Exception) {
-                    return@post call.respond(HttpStatusCode.BadRequest, "Invalid book format!")
-                }
+                val parameters = call.receiveParameters()
+                val id = parameters["id"]?.toIntOrNull()
+                val title = parameters["title"]
+                val author = parameters["author"]
+                val genre = parameters["genre"]
 
-                // Verifica se o ID já existe
-                if (books.any { it.id == book.id }) {
-                    call.respond(HttpStatusCode.Conflict, "A book with ID ${book.id} already exists!")
+                if (id == null || title.isNullOrBlank() || author.isNullOrBlank() || genre.isNullOrBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, "All fields are required!")
                 } else {
-                    books.add(book) // Adiciona o livro à lista em memória
-                    call.respond(HttpStatusCode.Created, "Book '${book.title}' added successfully!")
+                    if (books.any { it.id == id }) {
+                        call.respond(HttpStatusCode.Conflict, "A book with ID $id already exists!")
+                    } else {
+                        books.add(Book(id, title, author, genre))
+                        call.respondHtml {
+                            body {
+                                h1 { +"Book Added Successfully!" }
+                                a(href = "/") { +"Back to Home" }
+                            }
+                        }
+                    }
                 }
             }
 
-            // Endpoint para listar itens genéricos
+            // Rotas genéricas para outros itens
             get("/items") {
-                val items = listOf("Item 1", "Item 2", "Item 3") // Exemplo de lista de itens
+                val items = listOf("Item 1", "Item 2", "Item 3")
                 call.respond(HttpStatusCode.OK, items)
             }
 
-            // Rota para obter um item específico
             get("/items/{id}") {
                 val id = call.parameters["id"]?.toIntOrNull()
                 if (id == null) {
@@ -72,7 +148,6 @@ fun main() {
                 }
             }
 
-            // Rota para adicionar um novo item
             post("/items") {
                 val item = call.receiveOrNull<String>()
                 if (item.isNullOrEmpty()) {
@@ -82,7 +157,6 @@ fun main() {
                 }
             }
 
-            // Rota para deletar um item
             delete("/items/{id}") {
                 val id = call.parameters["id"]?.toIntOrNull()
                 if (id == null) {
