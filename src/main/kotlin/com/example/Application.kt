@@ -10,7 +10,7 @@ import io.ktor.server.request.*
 
 // Definição da classe Books
 @kotlinx.serialization.Serializable
-data class Books(
+data class Book(
     val id: Int,
     val title: String,
     val author: String,
